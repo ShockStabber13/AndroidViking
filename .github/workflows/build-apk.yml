@@ -17,9 +17,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      # GitHub's Ubuntu runner already includes the Android SDK command-line
+      # tools. setup-android@v3 tries to install obsolete "tools" and fails.
       - name: Install SDK 35
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+        run: |
+          sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
