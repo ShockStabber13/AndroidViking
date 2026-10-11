@@ -36,10 +36,11 @@ final class BridgeServer implements AutoCloseable {
     private int failedPins;
     private long failureWindow;
 
-    BridgeServer() throws IOException {
+    BridgeServer(String pairedPin) throws IOException {
+        if (pairedPin == null || !pairedPin.matches("[0-9]{6}"))
+            throw new IllegalArgumentException("Invalid AndroidViking pairing PIN");
         listener = new ServerSocket(PORT);
-        pin = String.format(java.util.Locale.ROOT, "%06d",
-                new SecureRandom().nextInt(1_000_000));
+        pin = pairedPin;
         worker = new Thread(this::serve, "Lightning-LAN-Handoff");
         worker.setDaemon(true);
         worker.start();
