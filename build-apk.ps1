@@ -23,11 +23,38 @@ if (-not (Test-Path $gradleExe)) {
     if (-not (Test-Path $gradleExe)) { throw 'Gradle extraction failed.' }
 }
 
-$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME }
-       elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT }
-       else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
-if (-not (Test-Path $sdk)) {
-    throw "Android SDK not found: $sdk. Install SDK Platform 35 in Android Studio or set ANDROID_HOME."
+# Prefer an explicit SDK environment variable, then try common Windows SDK locations.
+# PowerShell environment variables use $env:ANDROID_HOME (not $ANDROID_HOME).
+$sdkCandidates = @(
+    @{ Path = $env:ANDROID_HOME; Label = 'ANDROID_HOME' }
+    @{ Path = $env:ANDROID_SDK_ROOT; Label = 'ANDROID_SDK_ROOT' }
+    @{ Path = 'C:\Android\SDK'; Label = 'C:\Android\SDK' }
+    @{ Path = (Join-Path $env:LOCALAPPDATA 'Android\Sdk'); Label = 'Android Studio default' }
+)
+$sdk = $null
+$missingPlatform = @()
+foreach ($candidate in $sdkCandidates) {
+    $candidatePath = $candidate.Path
+    if ([string]::IsNullOrWhiteSpace($candidatePath)) { continue }
+    if (-not (Test-Path -LiteralPath $candidatePath -PathType Container)) {
+        if ($candidate.Label -in @('ANDROID_HOME', 'ANDROID_SDK_ROOT')) {
+            Write-Warning "$($candidate.Label) points to a missing folder: $candidatePath. Checking other locations..."
+        }
+        continue
+    }
+    $platformJar = Join-Path $candidatePath 'platforms\android-35\android.jar'
+    if (-not (Test-Path -LiteralPath $platformJar -PathType Leaf)) {
+        $missingPlatform += "$($candidate.Label): $candidatePath"
+        continue
+    }
+    $sdk = (Resolve-Path -LiteralPath $candidatePath).Path
+    break
+}
+if (-not $sdk) {
+    if ($missingPlatform.Count -gt 0) {
+        throw "An Android SDK was found, but Android SDK Platform 35 is missing. Install Platform 35 using Android Studio > SDK Manager. SDKs checked: $($missingPlatform -join '; ')"
+    }
+    throw 'Android SDK not found. Set $env:ANDROID_HOME = "C:\Android\SDK" in PowerShell, or install the SDK in Android Studio.'
 }
 $env:ANDROID_HOME = $sdk
 $env:ANDROID_SDK_ROOT = $sdk
