@@ -75,7 +75,13 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(BLACK);
         getWindow().getDecorView().setSystemUiVisibility(0);
 
-        try { server = new BridgeServer(); }
+        String pin = getPreferences(MODE_PRIVATE).getString("pairPin", "");
+        if (!pin.matches("[0-9]{6}")) {
+            pin = String.format(Locale.ROOT, "%06d",
+                    new java.security.SecureRandom().nextInt(1_000_000));
+            getPreferences(MODE_PRIVATE).edit().putString("pairPin", pin).apply();
+        }
+        try { server = new BridgeServer(pin); }
         catch (IOException e) { server = null; }
 
         LinearLayout root = new LinearLayout(this);
