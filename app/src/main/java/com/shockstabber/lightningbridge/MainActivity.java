@@ -63,7 +63,7 @@ public class MainActivity extends Activity {
         + "if(this.__lightningWatch)this.addEventListener('load',function(){"
         + "if(this.status!==200)return;"
         + "try{var result=JSON.parse(this.responseText);"
-        + "if(typeof result['direct-link']==='string')window.LightningReceiver.onDirectLink(result['direct-link']);"
+        + "if(typeof result['direct-link']==='string')window.LightningReceiver.onDirectLink(result['direct-link'],location.href);"
         + "}catch(e){}"
         + "});"
         + "return send.apply(this,arguments);};"
@@ -226,11 +226,15 @@ public class MainActivity extends Activity {
     }
 
     private class CaptureReceiver {
-        @JavascriptInterface public void onDirectLink(String signedUrl) {
-            // JavaScript interfaces can be called by embedded frames. Accept only known
-            // signed storage hosts, HTTPS, and only after the user loaded a valid page.
-            if (!isHostUrl(currentPage) || !isTrustedStorageUrl(signedUrl)) return;
-            runOnUiThread(() -> onCaptured(signedUrl));
+        @JavascriptInterface public void onDirectLink(String signedUrl, String fromPage) {
+            // A nested frame cannot hand off its own file or a stale result.
+            if (!isHostUrl(currentPage) || !isHostUrl(fromPage) ||
+                    !isTrustedStorageUrl(signedUrl)) return;
+            if (!Uri.parse(fromPage).getPath().equals(Uri.parse(currentPage).getPath()))
+                return;
+            runOnUiThread(() -> {
+                if (currentPage.equals(fromPage)) onCaptured(signedUrl);
+            });
         }
     }
 
