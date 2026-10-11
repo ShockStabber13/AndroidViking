@@ -1,6 +1,12 @@
 package com.shockstabber.lightningbridge;
 
 import android.app.Activity;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Build;
 import android.content.ClipData;
@@ -40,6 +46,8 @@ public class MainActivity extends Activity {
     private TextView status;
     private TextView endpoint;
     private String currentPage = "";
+    private boolean screenVisible = false;
+    private static final String CHANNEL = "lightning_requests";
 
     // HAR confirmed this host POSTS to /f/<id> after a real Turnstile solve,
     // returning JSON with both 'link' and 'direct-link'. Capture only that response.
@@ -105,10 +113,12 @@ public class MainActivity extends Activity {
         status = label("Waiting for page", 14, WHITE);
         status.setPadding(0, dp(6), 0, dp(4));
         root.addView(status);
-        endpoint = label(server == null ? "Wi-Fi server failed to start" : "LAN endpoint: " + server.endpoint(), 11, GREEN);
+        endpoint = label(server == null ? "Wi-Fi server failed to start" :
+                "PHONE IP: " + server.ip() + "   PORT: " + BridgeServer.PORT +
+                "   PAIR PIN: " + server.pin(), 13, GREEN);
         endpoint.setMaxLines(3);
         root.addView(endpoint);
-        root.addView(label("Keep this screen open during the handoff. No automatic CAPTCHA solving.", 11, WHITE));
+        root.addView(label("Keep the app open for reliable Wi-Fi handoff. Verify normally if asked.", 11, WHITE));
 
         browser = new WebView(this);
         browser.setBackgroundColor(BLACK);
@@ -159,8 +169,9 @@ public class MainActivity extends Activity {
             }
             currentPage = value;
             if (server != null) {
-                server.rotateSession();
-                endpoint.setText("LAN endpoint: " + server.endpoint());
+                server.beginPage(value);
+                endpoint.setText("PHONE IP: " + server.ip() + "   PORT: " +
+                        BridgeServer.PORT + "   PAIR PIN: " + server.pin());
             }
             status.setText("Loading ViKiNG FiLE…");
             browser.loadUrl(value);
@@ -169,8 +180,43 @@ public class MainActivity extends Activity {
             if (server == null) return;
             ((ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE))
                 .setPrimaryClip(ClipData.newPlainText("Lightning Bridge handoff (secret)", server.endpoint()));
-            status.setText("Handoff endpoint copied. Treat it as a secret.");
+            status.setText("Handoff endpoint copied. The PIN pairs your Switch.");
         });
+        if (server != null) {
+            server.setRequestListener(url -> runOnUiThread(() -> {
+                currentPage = url;
+                status.setText("Switch requested Lightning. Verify in Android if prompted.");
+                browser.loadUrl(url);
+                if (!screenVisible) showRequestNotification();
+            }));
+        }
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        nm.createNotificationChannel(new NotificationChannel(
+                CHANNEL, "Switch Lightning Requests", NotificationManager.IMPORTANCE_HIGH));
+        if (Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 1);
+        }
+    }
+
+    @Override protected void onResume() { super.onResume(); screenVisible = true; }
+    @Override protected void onPause() { screenVisible = false; super.onPause(); }
+
+    private void showRequestNotification() {
+        Intent launch = new Intent(this, MainActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent open = PendingIntent.getActivity(this, 0, launch,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        Notification notice = new Notification.Builder(this, CHANNEL)
+                .setContentTitle("SwitchGamesBrowser Lightning request")
+                .setContentText("Tap to verify the file download in AndroidViking")
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setAutoCancel(true)
+                .setContentIntent(open)
+                .build();
+        ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE))
+                .notify(19071, notice);
     }
 
     private class CaptureReceiver {
@@ -186,7 +232,8 @@ public class MainActivity extends Activity {
         if (server == null || !isTrustedStorageUrl(signedUrl)) return;
         server.setSignedUrl(signedUrl);
         status.setText("✓ Signed direct URL captured. Ready for Wi-Fi handoff.");
-        endpoint.setText("LAN endpoint: " + server.endpoint());
+        endpoint.setText("PHONE IP: " + server.ip() + "   PORT: " +
+                BridgeServer.PORT + "   PAIR PIN: " + server.pin());
     }
 
     private static boolean isHostUrl(String value) {
