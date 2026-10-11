@@ -21,7 +21,10 @@ jobs:
       # tools. setup-android@v3 tries to install obsolete "tools" and fails.
       - name: Install SDK 35
         run: |
-          sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
+          SDKMANAGER="$(find /usr/local/lib/android/sdk/cmdline-tools -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER" || { echo 'Android SDK manager not installed on runner'; exit 1; }
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install 'platforms;android-35' 'build-tools;35.0.0'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
